@@ -44,6 +44,7 @@ class GradescopeAssignment:
         props = soup.find(
             "li", {"data-react-class": "AddExtension"})["data-react-props"]
         data = json.loads(props)
+        
         students = {row["email"]: row["id"]
                     for row in data.get("students", [])}
         user_id = students.get(email)
@@ -51,16 +52,17 @@ class GradescopeAssignment:
             raise GradescopeAPIError("student email not found")
 
         # A helper method to transform the date
-        def transform_date(datestr: str):
-            dt = pytz.timezone("US/Pacific").localize(parse(datestr))
+        def transform_date(datestr: str, timezone_identifier: str):
+            dt = pytz.timezone(timezone_identifier).localize(parse(datestr))
             dt = dt + timedelta(num_days)
             return dt.astimezone(pytz.utc)
 
         assignment = data["assignment"]
-        new_due_date = transform_date(assignment["due_date"])
+        tz_id = data["timezone"]["identifier"]
+        new_due_date = transform_date(assignment["due_date"], tz_id)
 
         if assignment["hard_due_date"]:
-            new_hard_due_date = transform_date(assignment["hard_due_date"])
+            new_hard_due_date = transform_date(assignment["hard_due_date"], tz_id)
 
         # Make the post request to create the extension
         url = self.get_url() + "/extensions"
