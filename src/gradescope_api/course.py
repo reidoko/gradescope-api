@@ -72,21 +72,20 @@ class GradescopeCourse:
         return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id)
 
     def get_assignments(self, where=lambda x: True) -> list[GradescopeAssignment]:
+        if (callable(where)):
+            filter_fn = lambda x: x["type"] == "assignment" and where(x)
+        else:
+            key = where.lower()
+            filter_fn = lambda x: x["type"] == "assignment" and key in x["title"].lower()
+            
         response = self._client.session.get(f"https://www.gradescope.com/courses/{self.course_id}/assignments")
         soup = BeautifulSoup(response.content, "html.parser")
         props = soup.find(
             attrs={"data-react-class" : "AssignmentsTable"}
         )["data-react-props"]
         assignment_data = json.loads(props)["table_data"]
-            
-        if (callable(where)):
-            return [
-                self.get_assignment(assignment_url=f"https://www.gradescope.com/courses/{data['url']}") 
-                for data in filter(lambda x: x["type"] == "assignment" and where(x['title']), assignment_data)
-            ]
-        else:
-            key = where.lower()
-            return [
-                self.get_assignment(assignment_url=f"https://www.gradescope.com/courses/{data['url']}") 
-                for data in filter(lambda x: x["type"] == "assignment" and key in x['title'].lower(), assignment_data)
-            ]
+        
+        return [
+            self.get_assignment(assignment_url=f"https://www.gradescope.com/courses/{data['url']}") 
+            for data in filter(filter_fn, assignment_data)
+        ]
