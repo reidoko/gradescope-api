@@ -26,6 +26,18 @@ class GradescopeAssignment:
     def get_url(self) -> str:
         return self._course.get_url() + f"/assignments/{self.assignment_id}"
 
+    def get_title(self) -> str:
+        course_id = self._course.course_id
+        assignment_id = self.assignment_id
+        response = self._client.session.get(
+            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}"
+        )
+        check_response(response, "could not load assignment")
+        soup = BeautifulSoup(response.content, "html.parser")
+        title = soup.find("h2", {"class" : "sidebar--title"})["title"]
+        return title
+        
+
     def apply_extension(self, email: str, num_days: int):
         """
         A new method to apply an extension to a Gradescope assignment, given an email and a number of days.
