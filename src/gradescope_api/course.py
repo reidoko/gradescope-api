@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import TYPE_CHECKING, Dict, List, Optional
+from collections.abc import Callable
 
 from bs4 import BeautifulSoup
 from gradescope_api.errors import check_response
@@ -14,13 +15,32 @@ if TYPE_CHECKING:
 
 
 class GradescopeCourse:
-    def __init__(self, _client: GradescopeClient, course_id: str) -> None:
+    def __init__(self, _client: GradescopeClient, course_id: str, course_name: Optional[str] = None, course_term: Optional[str] = None) -> None:
         self._client = _client
         self.course_id = course_id
+        self.course_name = course_name
+        self.course_term = course_term
         self.roster: List[GradescopeStudent] = []
+
+    def _initialize(self):
+        response = self._client.session.get(url=self.get_url(), timeout=20)
+        check_response(response, "failed to get course page")
+        soup = BeautifulSoup(response.content, "html.parser")
+        self.course_name = next(soup.find("h1").children)
+        self.course_term = next(soup.find("h2", attrs={"class" : "courseHeader--term"}).children)
 
     def get_url(self) -> str:
         return self._client.get_base_url() + f"/courses/{self.course_id}"
+
+    def get_name(self) -> str:
+        if self.course_name is None:
+            self._initialize()
+        return self.course_name
+
+    def get_term(self) -> str:
+        if self.course_term is None:
+            self._initialize()
+        return self.course_term
 
     def get_roster(self) -> List[GradescopeStudent]:
         if self.roster:
@@ -65,14 +85,16 @@ class GradescopeCourse:
         return None
 
     def get_assignment(
-        self, assignment_id: Optional[str] = None, assignment_url: Optional[str] = None
+        self, assignment_id: Optional[str] = None, assignment_url: Optional[str] = None, assignment_name: Optional[str] = None
     ) -> Optional[GradescopeAssignment]:
         assert assignment_id or assignment_url
         assignment_id = assignment_id or get_url_id(url=assignment_url, kind="assignments")
-        return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id)
+        return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id, assignment_name=assignment_name)
 
-    def get_assignments(self, where=lambda x: True) -> list[GradescopeAssignment]:
+    def get_assignments(self, where: Optional[Union[str, Callable[[Dict], bool]]]=lambda x: True) -> list[GradescopeAssignment]:
         if (callable(where)):
+            # You can filter on whatever attributes are available in the table data
+            # e.g. x["submission_window"]["due_date"]
             filter_fn = lambda x: x["type"] == "assignment" and where(x)
         else:
             key = where.lower()
@@ -86,6 +108,8 @@ class GradescopeCourse:
         assignment_data = json.loads(props)["table_data"]
         
         return [
-            self.get_assignment(assignment_url=f"https://www.gradescope.com/courses/{data['url']}") 
+            self.get_assignment(
+                assignment_url=f"https://www.gradescope.com/courses/{data['url']}",
+                assignment_name=data["title"])
             for data in filter(filter_fn, assignment_data)
         ]

@@ -18,24 +18,26 @@ GRADESCOPE_DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 class GradescopeAssignment:
-    def __init__(self, _client: GradescopeClient, _course: GradescopeCourse, assignment_id: str) -> None:
+    def __init__(self, _client: GradescopeClient, _course: GradescopeCourse, assignment_id: str, assignment_name: Optional[str] = None) -> None:
         self._client = _client
         self._course = _course
         self.assignment_id = assignment_id
+        self.assignment_name = assignment_name
 
     def get_url(self) -> str:
         return self._course.get_url() + f"/assignments/{self.assignment_id}"
 
-    def get_title(self) -> str:
-        course_id = self._course.course_id
-        assignment_id = self.assignment_id
-        response = self._client.session.get(
-            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}"
-        )
-        check_response(response, "could not load assignment")
-        soup = BeautifulSoup(response.content, "html.parser")
-        title = soup.find("h2", {"class" : "sidebar--title"})["title"]
-        return title
+    def get_name(self) -> str:
+        if self.assignment_name is None:
+            course_id = self._course.course_id
+            assignment_id = self.assignment_id
+            response = self._client.session.get(
+                f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}"
+            )
+            check_response(response, "could not load assignment")
+            soup = BeautifulSoup(response.content, "html.parser")
+            self.assignment_name = soup.find("h2", {"class" : "sidebar--title"})["title"]
+        return self.assignment_name
         
 
     def apply_extension(self, email: str, num_days: int):

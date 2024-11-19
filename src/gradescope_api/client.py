@@ -73,6 +73,26 @@ class GradescopeClient:
         response = self.submit_form(url=url, data=payload)
         check_response(response, error="failed to log in")
 
-    def get_course(self, course_url: Optional[str] = None, course_id: Optional[str] = None):
+    def get_course(self, course_url: Optional[str] = None, course_id: Optional[str] = None, course_name: Optional[str] = None, course_term : Optional[str] = None):
         course_id = course_id or get_url_id(course_url, "courses")
-        return GradescopeCourse(_client=self, course_id=course_id)
+        return GradescopeCourse(_client=self, course_id=course_id, course_name=course_name, course_term=course_term)
+
+    def get_courses(self):
+        response = self.session.get(BASE_URL)
+        content = response.content
+        soup = BeautifulSoup(content, "html.parser")
+        terms_and_courses = soup.find_all("div", attrs={"class":["courseList--term","courseList--coursesForTerm"]})
+        current_term = None
+        
+        courses = []
+        for term_or_courses in terms_and_courses:
+            if term_or_courses["class"][0] == "courseList--term":
+                current_term = next(term_or_courses.children)
+            else:
+                for course_info in term_or_courses.find_all("a"):
+                    courses.append(self.get_course(
+                        course_id=course_info["href"].split('/')[-1],
+                        course_name=next(course_info.find("h3").children),
+                        course_term=current_term
+                    ))
+        return courses
