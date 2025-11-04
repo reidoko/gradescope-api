@@ -40,7 +40,7 @@ class GradescopeAssignment:
         return self.assignment_name
         
 
-    def apply_extension(self, email: str, num_days: int):
+    def apply_extension(self, email: str, num_days: int, num_hours: Optional[int] = 0):
         """
         A new method to apply an extension to a Gradescope assignment, given an email and a number of days.
         """
@@ -68,7 +68,7 @@ class GradescopeAssignment:
         # A helper method to transform the date
         def transform_date(datestr: str, timezone_identifier: str):
             dt = pytz.timezone(timezone_identifier).localize(parse(datestr))
-            dt = dt + timedelta(num_days)
+            dt = dt + timedelta(days=num_days, hours=num_hours)
             return dt.astimezone(pytz.utc)
 
         assignment = data["assignment"]
