@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from dateutil.parser import parse
 
 from gradescope_api.errors import GradescopeAPIError, check_response
+from gradescope_api.submission import GradescopeSubmission
 
 if TYPE_CHECKING:
     from gradescope_api.client import GradescopeClient
@@ -39,6 +40,64 @@ class GradescopeAssignment:
             self.assignment_name = soup.find("h2", {"class" : "sidebar--title"})["title"]
         return self.assignment_name
         
+    def get_submission(self, student: GradescopeStudent) -> Optional[GradescopeSubmission]:
+        """
+        Get the latest submission for this assignment given a GradescopeStudent
+        """
+        course_id = self._course.course_id
+        assignment_id = self.assignment_id
+        response = self._client.session.get(
+            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions", timeout=20
+        )
+        check_response(response, "could not load assignment")
+        soup = BeautifulSoup(response.content, "html.parser")
+        rows = [r.find("a") for r in soup.find_all("td", class_="table--primaryLink")]
+        submission_id = None
+        for row in rows:
+            if row.text == student.full_name:
+                submission_id = row["href"].split('/')[-1]
+                break
+
+        if submission_id is None:
+            return None
+        return GradescopeSubmission(
+            self._client,
+            course_id,
+            self,
+            student,
+            submission_id
+        )
+        
+        # self._client.start_driver()
+        # self._client.driver.get(f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions")
+
+    def get_latest_submissions(self):
+        """
+        Get all the latest submissions for this assignment
+        """
+        course_id = self._course.course_id
+        assignment_id = self.assignment_id
+        response = self._client.session.get(
+            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions", timeout=20
+        )
+        check_response(response, "could not load assignment")
+        roster = self._course.get_roster()
+        soup = BeautifulSoup(response.content, "html.parser")
+        rows = [r.find("a") for r in soup.find_all("td", class_="table--primaryLink")]
+        submissions = []
+        for row in rows:
+            submission_id = row["href"].split('/')[-1]
+            student = next(filter(lambda x: x.full_name == row.text, roster))
+            submission = GradescopeSubmission(
+                self._client,
+                course_id,
+                self,
+                student,
+                submission_id
+            )
+            submissions.append(submission)
+            
+        return submissions
 
     def apply_extension(self, email: str, num_days: int, num_hours: Optional[int] = 0):
         """
