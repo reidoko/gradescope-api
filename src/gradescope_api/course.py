@@ -95,7 +95,7 @@ class GradescopeCourse:
         return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id, assignment_name=assignment_name)
 
     def get_assignments(self, where: Optional[Union[str, Callable[[GradescopeAssignment], bool]]]=lambda x: True) -> list[GradescopeAssignment]:
-        if (callable(where)):
+        if callable(where):
             filter_fn = where
         else:
             key = where.lower()
