@@ -21,6 +21,7 @@ class GradescopeCourse:
         self.course_name = course_name
         self.course_term = course_term
         self.roster: List[GradescopeStudent] = []
+        self.assignments: List[GradescopeAssignment] = []
 
     def _initialize(self):
         response = self._client.session.get(url=self.get_url(), timeout=20)
@@ -93,25 +94,24 @@ class GradescopeCourse:
         assignment_id = assignment_id or get_url_id(url=assignment_url, kind="assignments")
         return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id, assignment_name=assignment_name)
 
-    def get_assignments(self, where: Optional[Union[str, Callable[[Dict], bool]]]=lambda x: True) -> list[GradescopeAssignment]:
+    def get_assignments(self, where: Optional[Union[str, Callable[[GradescopeAssignment], bool]]]=lambda x: True) -> list[GradescopeAssignment]:
         if (callable(where)):
-            # You can filter on whatever attributes are available in the table data
-            # e.g. x["submission_window"]["due_date"]
-            filter_fn = lambda x: x["type"] == "assignment" and where(x)
+            filter_fn = where
         else:
             key = where.lower()
-            filter_fn = lambda x: x["type"] == "assignment" and key in x["title"].lower()
-            
-        response = self._client.session.get(f"https://www.gradescope.com/courses/{self.course_id}/assignments")
-        soup = BeautifulSoup(response.content, "html.parser")
-        props = soup.find(
-            attrs={"data-react-class" : "AssignmentsTable"}
-        )["data-react-props"]
-        assignment_data = json.loads(props)["table_data"]
+            filter_fn = lambda x: key in x.assignment_name.lower()
+        if not self.assignments:
+            response = self._client.session.get(f"https://www.gradescope.com/courses/{self.course_id}/assignments")
+            soup = BeautifulSoup(response.content, "html.parser")
+            props = soup.find(
+                attrs={"data-react-class" : "AssignmentsTable"}
+            )["data-react-props"]
+            assignment_data = json.loads(props)["table_data"]
+            self.assignments = [
+                self.get_assignment(
+                    assignment_url=f"https://www.gradescope.com/courses/{data['url']}",
+                    assignment_name=data["title"]
+                ) for data in filter(lambda x: x["type"] == "assignment", assignment_data)
+            ]
         
-        return [
-            self.get_assignment(
-                assignment_url=f"https://www.gradescope.com/courses/{data['url']}",
-                assignment_name=data["title"])
-            for data in filter(filter_fn, assignment_data)
-        ]
+        return list(filter(filter_fn, self.assignments))
