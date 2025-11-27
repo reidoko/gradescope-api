@@ -95,11 +95,6 @@ class GradescopeCourse:
         return GradescopeAssignment(_client=self._client, _course=self, assignment_id=assignment_id, assignment_name=assignment_name)
 
     def get_assignments(self, where: Optional[Union[str, Callable[[GradescopeAssignment], bool]]]=lambda x: True) -> list[GradescopeAssignment]:
-        if callable(where):
-            filter_fn = where
-        else:
-            key = where.lower()
-            filter_fn = lambda x: key in x.assignment_name.lower()
         if not self.assignments:
             response = self._client.session.get(f"https://www.gradescope.com/courses/{self.course_id}/assignments")
             soup = BeautifulSoup(response.content, "html.parser")
@@ -113,5 +108,10 @@ class GradescopeCourse:
                     assignment_name=data["title"]
                 ) for data in filter(lambda x: x["type"] == "assignment", assignment_data)
             ]
+        if callable(where):
+            filter_fn = where
+        else:
+            key = where.lower()
+            filter_fn = lambda x: key in x.assignment_name.lower()
         
         return list(filter(filter_fn, self.assignments))
