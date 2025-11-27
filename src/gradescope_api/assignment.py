@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Optional
+from collections.abc import Callable
 
 import pytz
 from bs4 import BeautifulSoup
@@ -40,7 +41,7 @@ class GradescopeAssignment:
             self.assignment_name = soup.find("h2", {"class" : "sidebar--title"})["title"]
         return self.assignment_name
         
-    def get_submission(self, student: GradescopeStudent) -> Optional[GradescopeSubmission]:
+    def get_latest_submission(self, student: GradescopeStudent) -> Optional[GradescopeSubmission]:
         """
         Get the latest submission for this assignment given a GradescopeStudent
         """
@@ -71,10 +72,16 @@ class GradescopeAssignment:
         # self._client.start_driver()
         # self._client.driver.get(f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions")
 
-    def get_latest_submissions(self):
+    def get_latest_submissions(
+        self,
+        where: Optional[
+            Union[List[GradescopeStudent],
+                  Callable[[GradescopeSubmission], bool]
+        ]]=lambda x: True
+    ) -> List[GradescopeSubmission]:
         """
         Get all the latest submissions for this assignment
-        """
+        """            
         course_id = self._course.course_id
         assignment_id = self.assignment_id
         response = self._client.session.get(
@@ -96,8 +103,46 @@ class GradescopeAssignment:
                 submission_id
             )
             submissions.append(submission)
+
+        if callable(where):
+            filter_fn = where
+        elif isinstance(where, list):
+            valid_ids = set(student.user_id for student in where)
+            filter_fn = lambda x: x._student.user_id in valid_ids
+        else:
+            raise ValueError('"where" is not a list of GradescopeStudent objects or function on GradescopeSubmission objects.')
             
-        return submissions
+        return list(filter(filter_fn, submissions))
+
+    def get_all_submissions(
+        self,
+        where: Optional[Callable[[GradescopeSubmission], bool]]=lambda x: True,
+        where_latest: Optional[
+            Union[List[GradescopeStudent],
+                  Callable[[GradescopeSubmission], bool]
+        ]]=lambda x: True
+    ) -> List[GradescopeSubmission]:
+        """
+        Get every submission for this assignment.
+        """
+        latest_subs = self.get_latest_submissions(where_latest)
+        all_subs = []
+        for latest_sub in latest_subs:
+            response = self._client.session.get(f"{latest_sub.get_url()}.json?content=react&only_keys[]=past_submissions")
+            check_response(response, "could not load past submissions")
+            past_sub_data = json.loads(response.content)['past_submissions']
+            for past_data in past_sub_data:
+                sub = GradescopeSubmission(
+                    self._client,
+                    self._course.course_id,
+                    self,
+                    latest_sub._student,
+                    past_data['id']
+                )
+                if where(sub):
+                    all_subs.append(sub)
+            
+        return all_subs
 
     def apply_extension(self, email: str, num_days: int, num_hours: Optional[int] = 0):
         """
