@@ -94,7 +94,11 @@ class GradescopeAssignment:
         submissions = []
         for row in rows:
             submission_id = row["href"].split('/')[-1]
-            student = next(filter(lambda x: x.full_name == row.text, roster))
+            student = list(filter(lambda x: x.full_name == row.text, roster))
+            if student:
+                student = student[0]
+            else:
+                continue
             submission = GradescopeSubmission(
                 self._client,
                 course_id,
