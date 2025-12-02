@@ -41,18 +41,18 @@ class GradescopeAssignment:
             self.assignment_name = soup.find("h2", {"class" : "sidebar--title"})["title"]
         return self.assignment_name
         
-    def get_latest_submission(self, student: GradescopeStudent) -> Optional[GradescopeSubmission]:
+    def get_active_submission(self, student: GradescopeStudent) -> Optional[GradescopeSubmission]:
         """
-        Get the latest submission for this assignment given a GradescopeStudent
+        Get the active submission for this assignment given a GradescopeStudent
         """
         course_id = self._course.course_id
         assignment_id = self.assignment_id
         response = self._client.session.get(
-            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions", timeout=20
+            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/review_grades", timeout=20
         )
         check_response(response, "could not load assignment")
         soup = BeautifulSoup(response.content, "html.parser")
-        rows = [r.find("a") for r in soup.find_all("td", class_="table--primaryLink")]
+        rows = [r.find("a") for r in soup.find_all(class_="table--primaryLink")]
         submission_id = None
         for row in rows:
             if row.text == student.full_name:
@@ -72,7 +72,7 @@ class GradescopeAssignment:
         # self._client.start_driver()
         # self._client.driver.get(f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions")
 
-    def get_latest_submissions(
+    def get_active_submissions(
         self,
         where: Optional[
             Union[List[GradescopeStudent],
@@ -80,12 +80,12 @@ class GradescopeAssignment:
         ]]=lambda x: True
     ) -> List[GradescopeSubmission]:
         """
-        Get all the latest submissions for this assignment
+        Get all the active submissions for this assignment
         """            
         course_id = self._course.course_id
         assignment_id = self.assignment_id
         response = self._client.session.get(
-            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/submissions", timeout=20
+            f"https://www.gradescope.com/courses/{course_id}/assignments/{assignment_id}/review_grades", timeout=20
         )
         check_response(response, "could not load assignment")
         roster = self._course.get_roster()
@@ -121,7 +121,7 @@ class GradescopeAssignment:
     def get_all_submissions(
         self,
         where: Optional[Callable[[GradescopeSubmission], bool]]=lambda x: True,
-        where_latest: Optional[
+        where_active: Optional[
             Union[List[GradescopeStudent],
                   Callable[[GradescopeSubmission], bool]
         ]]=lambda x: True
@@ -129,10 +129,10 @@ class GradescopeAssignment:
         """
         Get every submission for this assignment.
         """
-        latest_subs = self.get_latest_submissions(where_latest)
+        active_subs = self.get_active_submissions(where_active)
         all_subs = []
-        for latest_sub in latest_subs:
-            response = self._client.session.get(f"{latest_sub.get_url()}.json?content=react&only_keys[]=past_submissions")
+        for active_sub in active_subs:
+            response = self._client.session.get(f"{active_sub.get_url()}.json?content=react&only_keys[]=past_submissions")
             check_response(response, "could not load past submissions")
             past_sub_data = json.loads(response.content)['past_submissions']
             for past_data in past_sub_data:
@@ -140,7 +140,7 @@ class GradescopeAssignment:
                     self._client,
                     self._course.course_id,
                     self,
-                    latest_sub._student,
+                    active_sub._student,
                     past_data['id']
                 )
                 if where(sub):
